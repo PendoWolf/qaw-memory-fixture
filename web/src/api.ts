@@ -7,9 +7,34 @@ export interface AppState {
   lastAction: string;
 }
 
-async function call(path: string, method: "GET" | "POST"): Promise<AppState> {
-  const res = await fetch(`${BASE}${path}`, { method });
-  if (!res.ok) throw new Error(`${method} ${path} failed: ${res.status}`);
+type Method = "GET" | "POST";
+
+// Thrown when an API request fails. Carries the request details as fields (not
+// just in the message) so callers can report them as structured data. status
+// is undefined when no HTTP response was received (network or CORS failure).
+export class ApiError extends Error {
+  readonly method: Method;
+  readonly path: string;
+  readonly status?: number;
+
+  constructor(message: string, method: Method, path: string, status?: number) {
+    super(message);
+    this.name = "ApiError";
+    this.method = method;
+    this.path = path;
+    this.status = status;
+  }
+}
+
+async function call(path: string, method: Method): Promise<AppState> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, { method });
+  } catch (e) {
+    // fetch rejects on network/CORS errors; keep its message for the UI.
+    throw new ApiError((e as Error).message, method, path);
+  }
+  if (!res.ok) throw new ApiError(`${method} ${path} failed: ${res.status}`, method, path, res.status);
   return res.json() as Promise<AppState>;
 }
 
